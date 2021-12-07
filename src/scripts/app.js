@@ -4,7 +4,7 @@ import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 
-import { monitorScroll, loadModels } from './util';
+import { monitorScroll, loadModels, lerp } from './util';
 
 //import shaders
 import vertexShader from '../shaders/vertex.glsl';
@@ -51,6 +51,13 @@ export default class Sketch {
 
     this.controls = new OrbitControls( this.camera, this.renderer.domElement );
 
+    this.mouse = new THREE.Vector2( 0.0, 0.0 );
+    this.mouseSpeed = new THREE.Vector2( 0.0, 0.0 );
+    this.oldMouseSpeed = new THREE.Vector2( 0.0, 0.0 );
+    this.mouseAcc = new THREE.Vector2( 0.0, 0.0 );
+    this.lMouseSpeed = new THREE.Vector2( 0.0, 0.0 );
+    this.lMouse = new THREE.Vector2( 0.0, 0.0 );
+
     this.setupListeners();
     this.addObjects();
     this.addComposerPass();
@@ -60,6 +67,7 @@ export default class Sketch {
 
   setupListeners() {
     window.addEventListener( 'resize', this.resize.bind( this ) );
+    document.addEventListener( 'mousemove', this.onMouseMove.bind( this ) );
     monitorScroll(ratio => {
       this.scrollPercentage = (ratio).toFixed(3);
     });
@@ -79,6 +87,10 @@ export default class Sketch {
       uniforms: {
         u_time: { value: 0.0 },
         tDiffuse: { value: null },
+        pixelSize: { value: 10 },
+        resolution: { value: new THREE.Vector2( this.width, this.height ) },
+        u_mouse: { value: new THREE.Vector2( this.width / 2.0, this.height / 2.0 ) },
+        u_mouseSpeed: { value: new THREE.Vector2( this.width / 2.0, this.height / 2.0 ) },
       },
       vertexShader,
       fragmentShader: shiftShader,
@@ -119,9 +131,28 @@ export default class Sketch {
     );
   }
 
+  onMouseMove( e ) {
+    this.oldMouse = this.mouse;
+    this.mouse = new THREE.Vector2( e.clientX / this.width , ( this.height - e.clientY ) / this.height );
+    this.oldMouseSpeed = this.mouseSpeed;
+    this.mouseSpeed = new THREE.Vector2( Math.abs(Math.min((this.mouse.x - this.oldMouse.x) * 10, 1)), Math.abs(Math.min((this.mouse.y - this.oldMouse.y) * 10), 1));
+    this.mouseAcc = new THREE.Vector2( (this.mouse.x - e.clientX) - this.mouseSpeed.x , (this.mouse.y - this.height + e.clientY) - this.mouseSpeed.y );
+    this.shaderPass.uniforms.u_mouse.value = this.mouse;
+  }
+
+  updateMouse() {
+    this.lMouse.x -= ( this.lMouse.x - this.mouse.x) * 0.1;
+    this.lMouse.y -= ( this.lMouse.y - this.mouse.y ) * 0.1;
+    this.lMouseSpeed.x = this.lMouse.x - this.mouse.x;
+    this.lMouseSpeed.y = this.lMouse.y - this.mouse.y;
+    this.shaderPass.uniforms.u_mouseSpeed.value = this.lMouseSpeed;
+  }
+
   render() {
     this.time += 0.05;
     this.material.uniforms.u_time.value = this.time;
+    this.updateMouse();
+
     // this.mesh.rotation.x = this.time / 20;
     // this.mesh.rotation.y = this.time / 10;
     if ( this.shaderPass ) {
